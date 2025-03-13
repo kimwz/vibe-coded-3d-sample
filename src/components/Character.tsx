@@ -1,190 +1,108 @@
-import { forwardRef } from "react";
-import { Box, Cylinder, Sphere } from "@react-three/drei";
-import { Mesh } from "three";
+import { forwardRef, useRef, useEffect, useState } from "react";
+import { useGLTF, useAnimations } from "@react-three/drei";
+import { Group } from "three";
+import { SkeletonUtils } from "three/examples/jsm/Addons.js";
 
 interface CharacterProps {
   position: [number, number, number];
+  action: string;
 }
 
-const Character = forwardRef<Mesh, CharacterProps>(({ position }, ref) => {
+const Character = forwardRef<Group, CharacterProps>(({ position, action }, ref) => {
+  const group = useRef<Group>(null);
+  const [model, setModel] = useState<Group | null>(null);
+  // 캐릭터 모델을 space-marine으로 변경
+  const { scene, animations } = useGLTF("https://agent8-games.verse8.io/assets/3d/characters/space-marine.glb");
+  
+  // 추가 애니메이션 로드
+  const runAnimation = useGLTF("https://agent8-games.verse8.io/assets/3d/animations/mixamorig/run.glb");
+  const attackAnimation = useGLTF("https://agent8-games.verse8.io/assets/3d/animations/mixamorig/punch.glb");
+  
+  // 모든 애니메이션을 하나의 배열로 합치기
+  const allAnimations = [
+    ...(animations || []),
+    ...(runAnimation.animations || []),
+    ...(attackAnimation.animations || [])
+  ];
+  
+  // 애니메이션 이름 설정
+  useEffect(() => {
+    if (runAnimation.animations && runAnimation.animations.length > 0) {
+      runAnimation.animations[0].name = 'run';
+    }
+    if (attackAnimation.animations && attackAnimation.animations.length > 0) {
+      attackAnimation.animations[0].name = 'attack';
+    }
+  }, [runAnimation.animations, attackAnimation.animations]);
+  
+  const { actions, mixer } = useAnimations(allAnimations, model);
+  
+  // Clone the scene to avoid sharing skeleton
+  useEffect(() => {
+    if (scene && !model) {
+      const clonedScene = SkeletonUtils.clone(scene);
+      setModel(clonedScene);
+    }
+  }, [scene, model]);
+  
+  // Forward the ref to the group
+  useEffect(() => {
+    if (group.current && ref) {
+      // @ts-ignore - forwarding ref between different types
+      ref.current = group.current;
+    }
+  }, [ref, group]);
+  
+  // Handle animation changes
+  useEffect(() => {
+    if (!actions || Object.keys(actions).length === 0) return;
+    
+    // Stop all current animations
+    Object.values(actions).forEach(action => action?.stop());
+    
+    // Determine which animation to play based on the action prop
+    let animationToPlay = 'idle';
+    
+    if (action === 'walking') {
+      animationToPlay = 'walk';
+    } else if (action === 'running') {
+      animationToPlay = 'run';
+    } else if (action === 'attacking') {
+      animationToPlay = 'attack';
+    }
+    
+    // Play the selected animation
+    if (actions[animationToPlay]) {
+      const currentAction = actions[animationToPlay];
+      currentAction?.reset().fadeIn(0.2).play();
+      
+      // 공격 애니메이션은 한 번만 재생 후 idle로 돌아가기
+      if (animationToPlay === 'attack') {
+        if (currentAction) {
+          // 애니메이션이 끝나면 idle로 돌아가기
+          const duration = currentAction.getClip().duration;
+          setTimeout(() => {
+            if (actions['idle']) {
+              currentAction.fadeOut(0.2);
+              actions['idle'].reset().fadeIn(0.2).play();
+            }
+          }, duration * 1000 - 200); // 페이드 아웃 시간 고려
+        }
+      }
+    } else {
+      // Fallback to idle if the requested animation doesn't exist
+      actions['idle']?.reset().fadeIn(0.2).play();
+    }
+    
+    return () => {
+      // Clean up animations
+      Object.values(actions).forEach(action => action?.stop());
+    };
+  }, [actions, action]);
+
   return (
-    <group ref={ref} position={position}>
-      {/* Body - Suit */}
-      <Box 
-        position={[0, 1, 0]} 
-        args={[0.9, 1.3, 0.6]}
-        castShadow
-      >
-        <meshStandardMaterial color="#192841" /> {/* Dark blue suit */}
-      </Box>
-      
-      {/* Shirt */}
-      <Box 
-        position={[0, 1.2, 0.31]} 
-        args={[0.6, 0.6, 0.01]}
-        castShadow
-      >
-        <meshStandardMaterial color="white" />
-      </Box>
-      
-      {/* Red Tie */}
-      <Box 
-        position={[0, 1.05, 0.32]} 
-        args={[0.15, 0.7, 0.01]}
-        castShadow
-      >
-        <meshStandardMaterial color="#c41e3a" />
-      </Box>
-      
-      {/* Head */}
-      <Sphere 
-        position={[0, 2, 0]} 
-        args={[0.4, 16, 16]}
-        castShadow
-      >
-        <meshStandardMaterial color="#fad7a0" /> {/* Skin tone */}
-      </Sphere>
-      
-      {/* Trump's distinctive hair */}
-      <Box 
-        position={[0, 2.3, 0]} 
-        args={[0.7, 0.2, 0.5]}
-        rotation={[0.1, 0, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#f1c40f" /> {/* Blonde hair */}
-      </Box>
-      
-      {/* Hair sides */}
-      <Box 
-        position={[-0.3, 2.1, 0]} 
-        args={[0.15, 0.3, 0.4]}
-        castShadow
-      >
-        <meshStandardMaterial color="#f1c40f" />
-      </Box>
-      <Box 
-        position={[0.3, 2.1, 0]} 
-        args={[0.15, 0.3, 0.4]}
-        castShadow
-      >
-        <meshStandardMaterial color="#f1c40f" />
-      </Box>
-      
-      {/* Hair front sweep */}
-      <Box 
-        position={[0, 2.15, 0.2]} 
-        args={[0.6, 0.15, 0.2]}
-        rotation={[0.3, 0, 0]}
-        castShadow
-      >
-        <meshStandardMaterial color="#f1c40f" />
-      </Box>
-      
-      {/* Eyes */}
-      <Sphere 
-        position={[-0.15, 2, 0.3]} 
-        args={[0.06, 8, 8]}
-        castShadow
-      >
-        <meshStandardMaterial color="white" />
-      </Sphere>
-      <Sphere 
-        position={[0.15, 2, 0.3]} 
-        args={[0.06, 8, 8]}
-        castShadow
-      >
-        <meshStandardMaterial color="white" />
-      </Sphere>
-      
-      {/* Pupils */}
-      <Sphere 
-        position={[-0.15, 2, 0.35]} 
-        args={[0.03, 8, 8]}
-        castShadow
-      >
-        <meshStandardMaterial color="#2980b9" /> {/* Blue eyes */}
-      </Sphere>
-      <Sphere 
-        position={[0.15, 2, 0.35]} 
-        args={[0.03, 8, 8]}
-        castShadow
-      >
-        <meshStandardMaterial color="#2980b9" />
-      </Sphere>
-      
-      {/* Mouth */}
-      <Box 
-        position={[0, 1.8, 0.35]} 
-        args={[0.2, 0.05, 0.05]}
-        castShadow
-      >
-        <meshStandardMaterial color="#cb4335" />
-      </Box>
-      
-      {/* Arms */}
-      <Box 
-        position={[-0.65, 1, 0]} 
-        args={[0.25, 0.8, 0.25]}
-        castShadow
-      >
-        <meshStandardMaterial color="#192841" /> {/* Match suit color */}
-      </Box>
-      <Box 
-        position={[0.65, 1, 0]} 
-        args={[0.25, 0.8, 0.25]}
-        castShadow
-      >
-        <meshStandardMaterial color="#192841" />
-      </Box>
-      
-      {/* Hands */}
-      <Sphere 
-        position={[-0.65, 0.5, 0]} 
-        args={[0.15, 8, 8]}
-        castShadow
-      >
-        <meshStandardMaterial color="#fad7a0" /> {/* Skin tone */}
-      </Sphere>
-      <Sphere 
-        position={[0.65, 0.5, 0]} 
-        args={[0.15, 8, 8]}
-        castShadow
-      >
-        <meshStandardMaterial color="#fad7a0" />
-      </Sphere>
-      
-      {/* Legs */}
-      <Box 
-        position={[-0.3, 0.3, 0]} 
-        args={[0.3, 0.6, 0.3]}
-        castShadow
-      >
-        <meshStandardMaterial color="#192841" /> {/* Match suit color */}
-      </Box>
-      <Box 
-        position={[0.3, 0.3, 0]} 
-        args={[0.3, 0.6, 0.3]}
-        castShadow
-      >
-        <meshStandardMaterial color="#192841" />
-      </Box>
-      
-      {/* Shoes */}
-      <Box 
-        position={[-0.3, 0, 0.1]} 
-        args={[0.3, 0.1, 0.5]}
-        castShadow
-      >
-        <meshStandardMaterial color="black" />
-      </Box>
-      <Box 
-        position={[0.3, 0, 0.1]} 
-        args={[0.3, 0.1, 0.5]}
-        castShadow
-      >
-        <meshStandardMaterial color="black" />
-      </Box>
+    <group ref={group} position={position} scale={[0.8, 0.8, 0.8]}>
+      {model && <primitive object={model} />}
     </group>
   );
 });

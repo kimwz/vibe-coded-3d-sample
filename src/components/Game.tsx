@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Box, Sphere, useKeyboardControls, PerspectiveCamera } from "@react-three/drei";
-import { Vector3, Mesh, Quaternion, Euler } from "three";
+import { Vector3, Euler, Group } from "three";
 import { generateRandomPosition, generateRandomTree } from "../utils/helpers";
 import Character from "./Character";
 import Terrain from "./Terrain";
@@ -11,10 +11,12 @@ interface GameProps {
 }
 
 export default function Game({ onScoreUpdate }: GameProps) {
-  const playerRef = useRef<Mesh>(null);
+  const playerRef = useRef<Group>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
   const playerRotation = useRef(new Euler(0, 0, 0));
   const { camera } = useThree();
+  const [playerAction, setPlayerAction] = useState('idle');
+  const [isAttacking, setIsAttacking] = useState(false);
   
   const [targets, setTargets] = useState(() => 
     Array.from({ length: 5 }, (_, i) => ({
@@ -33,12 +35,37 @@ export default function Game({ onScoreUpdate }: GameProps) {
   
   const [, getKeys] = useKeyboardControls();
   
+  // 마우스 클릭 이벤트 처리
+  useEffect(() => {
+    const handleMouseDown = () => {
+      if (!isAttacking) {
+        setIsAttacking(true);
+        setPlayerAction('attacking');
+        
+        // 공격 애니메이션이 끝나면 상태 초기화
+        setTimeout(() => {
+          setIsAttacking(false);
+        }, 1000); // 애니메이션 길이에 맞게 조정
+      }
+    };
+    
+    window.addEventListener('mousedown', handleMouseDown);
+    
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, [isAttacking]);
+  
   // Update camera position to follow player
   useFrame((_, delta) => {
     if (!playerRef.current || !cameraRef.current) return;
     
-    const { forward, backward, left, right } = getKeys();
-    const moveSpeed = 5;
+    // 공격 중이면 움직임 처리 스킵
+    if (isAttacking) return;
+    
+    const { forward, backward, left, right, shift } = getKeys();
+    const isRunning = !!shift;
+    const moveSpeed = isRunning ? 10 : 5; // 달리기 시 속도 증가
     const rotateSpeed = 2;
     
     // Calculate movement direction based on player's rotation
@@ -55,11 +82,22 @@ export default function Game({ onScoreUpdate }: GameProps) {
       playerRef.current.rotation.y = rotation.y;
     }
     
+    // Determine player action based on movement
+    let isMoving = false;
+    
     // Then handle movement in the direction the player is facing
     if (forward || backward) {
+      isMoving = true;
       // Calculate forward direction based on player rotation
       direction.set(0, 0, backward ? 1 : -1).applyEuler(rotation);
       playerRef.current.position.add(direction.multiplyScalar(moveSpeed * delta));
+    }
+    
+    // Update player action state
+    if (isMoving) {
+      setPlayerAction(isRunning ? 'running' : 'walking');
+    } else {
+      setPlayerAction('idle');
     }
     
     // Keep player within bounds
@@ -126,7 +164,7 @@ export default function Game({ onScoreUpdate }: GameProps) {
       <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 3, 6]} />
       
       {/* Player Character */}
-      <Character ref={playerRef} position={[0, 0, 0]} />
+      <Character ref={playerRef} position={[0, 0, 0]} action={playerAction} />
       
       {/* Terrain */}
       <Terrain />

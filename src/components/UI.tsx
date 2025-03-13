@@ -19,7 +19,7 @@ export default function UI({ score }: UIProps) {
     <div className="absolute z-10 w-full p-4 pointer-events-none">
       <div className="flex justify-between items-start">
         <div className="bg-black/50 text-white p-2 rounded">
-          <h2 className="text-xl font-bold">점수: {score}</h2>
+          <h2 className="text-xl font-bold">점수 : {score}</h2>
         </div>
         
         {showControls && (
@@ -30,6 +30,8 @@ export default function UI({ score }: UIProps) {
               <li>S - 뒤로 이동</li>
               <li>A - 왼쪽으로 회전</li>
               <li>D - 오른쪽으로 회전</li>
+              <li>Shift - 달리기</li>
+              <li>마우스 클릭 - 공격</li>
             </ul>
           </div>
         )}
